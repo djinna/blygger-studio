@@ -1,6 +1,6 @@
 import { routes } from "./contract/routes.ts";
 import { contractApp } from "./contract/app.ts";
-import { verifySession } from "./auth.ts";
+import { verifyPostToken, verifySession } from "./auth.ts";
 import { api } from "./api.ts";
 import { importerApi } from "./importer/api.ts";
 import { mentionsApi } from "./mentions/api.ts";
@@ -10,6 +10,11 @@ import { readApi } from "./read-api.ts";
 export const ownerApi = contractApp();
 ownerApi.use("*", async (c, next) => {
   c.header("Cache-Control", "no-store");
+  // The quick-post endpoint alone also accepts the scoped POST_TOKEN bearer.
+  const path = c.req.path.replace(/\/+$/, "");
+  if (path === "/api/post" && c.req.method === "POST" && (await verifyPostToken(c.env, c.req.header("authorization")))) {
+    return next();
+  }
   if (!(await verifySession(c.env, c.req.header("cookie")))) return c.json({ error: "unauthorized" }, 401);
   return next();
 });
