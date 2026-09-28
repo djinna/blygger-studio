@@ -3,6 +3,14 @@ export interface Env {
   MEDIA: R2Bucket;
   OWNER_PASSWORD: string;
   COOKIE_SECRET: string;
+  /** Owner session length in days (default 30). Deployment config. */
+  SESSION_DAYS?: string;
+  /**
+   * Optional bearer token for POST /api/post only (quick-post clients such as
+   * a Drafts action). Can create one fragment, and optionally publish it —
+   * nothing else. Unset = endpoint is cookie-only. Secret; never commit.
+   */
+  POST_TOKEN?: string;
   /**
    * Deployment mount path for the public surface (wrangler `vars`).
    * "" or "/" = domain root; otherwise a path like "/blyg". Unset falls back

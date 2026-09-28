@@ -202,6 +202,38 @@ api.post("/items/:id/publish", async (c) => {
 });
 
 /**
+ * Quick post: one call creates a fragment and, with `publish: true`,
+ * publishes it. Built for Drafts-style clients. It is the only /api route
+ * that also accepts the scoped POST_TOKEN bearer (see index.ts), so the
+ * token can add fragments to the blyg but can't edit, withdraw, or read
+ * anything. A failed publish discards the new draft, so a rejected post
+ * leaves nothing behind (the text is still in the client).
+ */
+api.post("/post", async (c) => {
+  const body = await c.req.json<{ content_md?: unknown; publish?: unknown }>().catch(() => null);
+  const text = typeof body?.content_md === "string" ? body.content_md.trim() : "";
+  if (!text) return c.json({ error: "content_md required" }, 400);
+  const item = await createDraft(c.env.DB, text, "fragment");
+  const origin = siteOrigin(await getSettings(c.env.DB), c.req.url, normalizeMount(c.env.MOUNT));
+  if (body?.publish !== true) {
+    return c.json({ id: item.id, status: item.status }, 201);
+  }
+  let error: { error: string; errors?: unknown } | null = null;
+  try {
+    const version = await publish(c.env.DB, item, null, origin);
+    await sendMentionsFor(c, item.id, version);
+    return c.json({ id: item.id, status: "public", version, url: `${origin}f/${item.id}` }, 201);
+  } catch (e) {
+    if (e instanceof TransclusionResolveError) error = { error: "one or more transclusions do not resolve", errors: e.errors };
+    else if (e instanceof TkPublishError) error = { error: "one or more TK scopes are not publish-ready", errors: e.issues };
+    else if (e instanceof FragmentTooLongError) error = { error: `fragment exceeds ${e.max} characters` };
+    else throw e;
+  }
+  await discardDraft(c.env.DB, item);
+  return c.json(error, 400);
+});
+
+/**
  * TK generation (tk-core-plan.md §5): resolve scope `n`'s sources exactly
  * like transclusion targets, call the provider, splice the output into the
  * working copy, and record provenance for the next publish to pick up.

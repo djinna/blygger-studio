@@ -5,7 +5,14 @@ import type { Env } from "./types.ts";
 import { hex } from "./util.ts";
 
 export const COOKIE_NAME = "blyg_session";
-const SESSION_SECONDS = 30 * 24 * 3600;
+const DEFAULT_SESSION_DAYS = 30;
+
+/** SESSION_DAYS env (positive integer, max 400 — browsers cap Max-Age there), else 30. */
+export function sessionSeconds(env: Env): number {
+  const n = Number(env.SESSION_DAYS);
+  const days = Number.isInteger(n) && n > 0 ? Math.min(n, 400) : DEFAULT_SESSION_DAYS;
+  return days * 24 * 3600;
+}
 
 async function hmacHex(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -35,10 +42,11 @@ export async function checkPassword(env: Env, password: string): Promise<boolean
 }
 
 export async function issueSessionCookie(env: Env): Promise<string> {
-  const expiry = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
+  const seconds = sessionSeconds(env);
+  const expiry = Math.floor(Date.now() / 1000) + seconds;
   const sig = await hmacHex(env.COOKIE_SECRET, String(expiry));
   const value = `${expiry}.${sig}`;
-  return `${COOKIE_NAME}=${value}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Lax`;
+  return `${COOKIE_NAME}=${value}; Path=/; Max-Age=${seconds}; HttpOnly; Secure; SameSite=Lax`;
 }
 
 export function clearSessionCookie(): string {
@@ -55,4 +63,16 @@ export async function verifySession(env: Env, cookieHeader: string | undefined):
   if (!Number.isInteger(expiry) || expiry * 1000 < Date.now()) return false;
   const expected = await hmacHex(env.COOKIE_SECRET, expiryStr);
   return timingSafeEqualStr(sig, expected);
+}
+
+/**
+ * Bearer-token check for the quick-post endpoint. False when POST_TOKEN is
+ * unset or too short to be a real secret, so an empty env can never match.
+ */
+export async function verifyPostToken(env: Env, authHeader: string | undefined): Promise<boolean> {
+  const token = env.POST_TOKEN;
+  if (!token || token.length < 32 || !authHeader) return false;
+  const m = authHeader.match(/^Bearer\s+(\S+)$/i);
+  if (!m) return false;
+  return timingSafeEqualStr(token, m[1]);
 }

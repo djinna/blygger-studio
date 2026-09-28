@@ -21,7 +21,7 @@
 
 import { type Context, Hono } from "hono";
 import { api } from "./api.ts";
-import { verifySession } from "./auth.ts";
+import { verifyPostToken, verifySession } from "./auth.ts";
 import { importerApi } from "./importer/api.ts";
 import { buildBlogrollOpml } from "./importer/opml.ts";
 import { publicHopperPage } from "./importer/pages.ts";
@@ -69,6 +69,11 @@ export function makeApp(mount: string) {
   app.route(studioBase, mentionsStudio);
 
   app.use("/api/*", async (c, next) => {
+    // The quick-post endpoint alone also accepts the scoped POST_TOKEN.
+    const path = new URL(c.req.url).pathname.replace(/\/+$/, "");
+    if (path === "/api/post" && c.req.method === "POST" && (await verifyPostToken(c.env, c.req.header("authorization")))) {
+      return next();
+    }
     if (!(await verifySession(c.env, c.req.header("cookie")))) {
       return c.json({ error: "unauthorized" }, 401);
     }
