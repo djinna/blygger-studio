@@ -1,7 +1,7 @@
 // Data access + publish-flow semantics — v0.1-plan §3.1.
 
 import { renderMarkdown } from "./markdown.ts";
-import { annotateGenerated, applyGeneratedWrappers, parseScopes, stripToOutput, TkPublishError, unresolvedScopes } from "./tk.ts";
+import { annotateGenerated, applyGeneratedWrappers, parseScopes, stripToOutput, TkPublishError, type TkPublishIssue, unresolvedScopes } from "./tk.ts";
 import { applyVersionAgreement, composeStubCite, composeTransclusionCite, parseStoredStub } from "./stub.ts";
 import {
   applyInternalLinks,
@@ -293,6 +293,20 @@ export async function publish(db: D1Database, item: ItemRow, note: string | null
       ...unresolved.map((s) => ({ at: s.start, reason: "scope has no output (never generated)" })),
     ]);
   }
+
+  // A TK source ref naming an item that doesn't exist at all can only be a
+  // typo or an invented id (e.g. model output that slipped past /generate).
+  // Published as-is it renders as literal "![[…]]" text, so fail the publish.
+  // Deliberately narrow: a source that exists but has since been withdrawn or
+  // unpublished still publishes — provenance already pinned the version used.
+  const unknownSources: TkPublishIssue[] = [];
+  for (const s of scopes) {
+    for (const id of s.sourceIds) {
+      const exists = await db.prepare("SELECT 1 FROM items WHERE id = ?").bind(id).first();
+      if (!exists) unknownSources.push({ at: s.start, reason: `TK scope references unknown item ![[${id}]]` });
+    }
+  }
+  if (unknownSources.length) throw new TkPublishError(unknownSources);
 
   const { text: strippedMd, spans } = stripToOutput(item.content_md, scopes);
   if (kind === "fragment" && strippedMd.length > FRAGMENT_MAX_CHARS) {

@@ -33,7 +33,7 @@ export interface TkParseError {
   reason: string;
 }
 
-function extractSourceIds(scopeText: string): string[] {
+export function extractSourceIds(scopeText: string): string[] {
   const seen = new Set<string>();
   const ids: string[] = [];
   for (const m of scopeText.matchAll(SOURCE_REF)) {

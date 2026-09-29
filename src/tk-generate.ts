@@ -4,7 +4,7 @@
 
 import { generate, markDocument, platformProviderFetch, ProviderError, type ProviderFetchLike } from "./ai/provider.ts";
 import { getSettings, saveWorkingCopy, setTkProvenance } from "./model.ts";
-import { parseScopes, setScopeOutput } from "./tk.ts";
+import { extractSourceIds, parseScopes, setScopeOutput } from "./tk.ts";
 import { resolveFragment } from "./transclusion.ts";
 import type { Env, ItemRow } from "./types.ts";
 import { nowIso } from "./util.ts";
@@ -50,6 +50,26 @@ export async function runGenerateScope(
   } catch (e) {
     if (e instanceof ProviderError) return { ok: false, status: 502, body: { error: e.message } };
     throw e;
+  }
+
+  // The model only ever sees this scope's resolved sources, so any ![[id]] in
+  // its output that isn't one of them is invented. Saving it would be worse
+  // than failing: inside a scope every ![[id]] is a source reference (syntax
+  // §TK), so the fake id becomes an unresolvable source that blocks every
+  // later regenerate, and publish renders it as literal "![[…]]" text.
+  const known = new Set(sources.map((s) => s.id));
+  const invented = extractSourceIds(result.text).filter((id) => !known.has(id));
+  if (invented.length) {
+    return {
+      ok: false,
+      status: 502,
+      body: {
+        error:
+          `provider output referenced item id(s) that are not sources of this scope: ${invented.join(", ")} ` +
+          "— nothing was saved. TK generates text only; it cannot insert images or embed items.",
+        invented,
+      },
+    };
   }
 
   const updatedMd = setScopeOutput(item.content_md, scope, result.text);

@@ -60,7 +60,11 @@ const SYSTEM_PROMPT =
   "instruction; you write the prose that replaces it. Output ONLY the replacement " +
   "text: no preamble, no meta-commentary, no code fences, no explanation of what " +
   "you did. The output becomes the literal body of the author's document, so match " +
-  "the voice, register, and formatting conventions of the surrounding context.";
+  "the voice, register, and formatting conventions of the surrounding context. " +
+  "You produce text only: you cannot create, capture, or insert images, screenshots, " +
+  "or other media. Never write transclusion syntax (![[id]]) and never invent item ids; " +
+  "if the instruction asks for something you cannot produce, write the best text-only " +
+  "response instead.";
 
 function buildUserContent(req: GenerateRequest): string {
   const parts: string[] = [`Instruction: ${req.instruction}`];

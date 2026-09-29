@@ -697,7 +697,7 @@ async function api(method, path, body) {
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) {
-    alert((json && (json.error || (json.errors && json.errors.map(e => e.directive + ": " + e.reason).join("\\n")))) || ("request failed: " + res.status));
+    alert((json && ((json.error && json.id ? json.error + " ![[" + json.id + "]]" + (json.reason ? " — " + json.reason : "") : json.error) || (json.errors && json.errors.map(e => e.directive + ": " + e.reason).join("\\n")))) || ("request failed: " + res.status));
     return null;
   }
   return json;
